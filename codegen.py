@@ -1,3 +1,5 @@
+from errors import InstructionError
+
 loc_table = {
     "include": "\masm32\include\{inc}.inc",
     "include_lib": "\masm32\lib\{lib}.lib",
@@ -12,7 +14,7 @@ func_table = {
     "return": "ret",
     "func_dec": "{name} proc {args}",
     "func_end": "ret\n{name} endp",
-    "var_assign": "{name} db {value}, 0"
+    "var_assign": "{name} {x} {value}, 0"
 }
 lits = {
     "print": "Print",
@@ -25,6 +27,7 @@ class Variables:
     variables = {}
     emg = None
     c = 0
+    c2 = -1
 
     @staticmethod
     def assign(name, func=False):
@@ -35,6 +38,11 @@ class Variables:
         Variables.variables[name] = f'{"F" if func else "v"}_{Variables.c}'
         Variables.c += 1
         return Variables.variables[name]
+
+    @staticmethod
+    def location():
+        Variables.c2 += 1
+        return f'l_{Variables.c2}'
 
     @staticmethod
     def register():
@@ -91,12 +99,16 @@ class Codes:
         return func_table["func_end"].format(name=name)
 
     @staticmethod
-    def var_assign(name, value):
-        return func_table["var_assign"].format(name=name, value=value)
+    def var_assign(name, value, string=False):
+        return func_table["var_assign"].format(x='db' if string else 'dword', name=name, value=value)
 
     @staticmethod
     def start_begin():
         return 'start:'
+
+    @staticmethod
+    def loc_begin(name):
+        return f'{name}:'
 
     @staticmethod
     def start_end():
@@ -142,141 +154,164 @@ class Codes:
     def if_close():
         return '.endif'
 
+    @staticmethod
+    def jump(loc):
+        return f'jmp {loc}'
+
+    @staticmethod
+    def cond_jump(loc, op):
+        match op:
+            case "==":
+                return f'je {loc}'
+            case "!=":
+                return f'jne {loc}'
+            case ">":
+                return f'jg {loc}'
+            case "<":
+                return f'jl {loc}'
+            case _:
+                raise InstructionError(f"The instruction '{op}' was not found!")
+
+
+heap_reg = []
+
 
 class Codegen:
     data = [".data"]
-    code = [Codes.start_begin()]
-    head = []
-    heap = []
+    code = [".code"]
+    head = [".386", ".model flat, stdcall", "option casemap: none"]
+    segments = {
+        "start": []
+    }
     pkgs = []
-    last_func = None
-    in_func = False
+    cur = segments["start"]
 
-    def __init__(self, imports, import_libs):
-        self.head.append(".386")
-        self.head.append(".model flat, stdcall")
-        self.head.append("option casemap: none ; CASE SENSITIVE = ON")
+    def __init__(self):
+        self.if_ret = None
+        self.prev = None
         Variables.register()
-        for import_ in imports:
-            self.include(import_)
-        for import_ in import_libs:
-            self.include_lib(import_)
 
-    def include(self, name):
-        if name in self.pkgs:
-            return
-        self.pkgs.append(name)
-        self.head.append(Codes.include(name))
+    def set_cur(self, name):
+        self.cur = self.segments[name]
 
-    def include_lib(self, name):
-        if name in self.pkgs:
+    def include(self, file):
+        if file in self.pkgs:
             return
-        self.pkgs.append(name)
-        self.head.append(Codes.include_lib(name))
+        self.pkgs.append(file)
+        self.head.append(Codes.include(file))
 
-    def import_(self, name):
-        if name in self.pkgs:
+    def include_lib(self, file):
+        if file in self.pkgs:
             return
-        self.pkgs.append(name)
-        self.head.append(Codes.import_(name))
+        self.pkgs.append(file)
+        self.head.append(Codes.include_lib(file))
+
+    def import_(self, file):
+        if file in self.pkgs:
+            compiler_warning(f"Double import ({file})")
+            return
+        self.pkgs.append(file)
+        self.head.append(Codes.import_(file))
+
+    def translate_operation(self, lhs, rhs, op):
+        self.cur.append(Codes.move('eax', lhs))
+        self.cur.append(Codes.move('ebx', rhs))
+        match op:
+            case '+':
+                self.cur.append(Codes.operation('add', 'eax', 'ebx'))
+                self.cur.append(Codes.move(lhs, 'eax'))
+            case '-':
+                self.cur.append(Codes.operation('sub', 'eax', 'ebx'))
+                self.cur.append(Codes.move(lhs, 'eax'))
+            case 'c':
+                self.cur.append(Codes.operation('cmp', 'eax', 'ebx'))
+            case '*':
+                self.cur.append(Codes.operation('imul', 'eax', 'ebx'))
+                self.cur.append(Codes.move(lhs, 'eax'))
+            case '/':
+                self.cur.append(Codes.operation('idiv', 'eax', 'ebx'))
+                self.cur.append(Codes.move(lhs, 'eax'))
+
+    def new_segment(self):
+        name = Variables.location()
+        self.segments[name] = []
+        return name
+
+    def handle_expr(self, expr):
+        return expr
 
     def if_(self, expr):
-        expr = self.parse_expr(expr)
-        self.heap.append(Codes.if_(expr))
+        r, op, l = self.handle_expr(expr)
+        self.cur.append(Codes.move('ecx', r))
+        self.cur.append(Codes.compare(l, 'ecx'))
+        self.prev = self.cur
+        name = self.new_segment()
+        self.cur.append(Codes.cond_jump(name, op))
+        self.set_cur(name)
 
-    def elif_(self, expr):
-        expr = self.parse_expr(expr)
-        self.heap.append(Codes.elif_(expr))
+    def else_if(self):
+        if self.prev:
+            self.cur = self.prev
+        name = self.new_segment()
+        self.cur.append(Codes.jump(name))
+        self.set_cur(name)
 
-    def else_(self):
-        self.heap.append(Codes.else_())
+    def closeif(self):
+        name = self.new_segment() if not self.if_ret else self.if_ret
+        self.cur.append(Codes.jump(name))
+        self.if_ret = name
 
-    def if_close(self):
-        self.heap.append(Codes.if_close())
-
-    def parse_expr(self, expr):
-        lhs, op, rhs = expr
-        if type(lhs) != str:
-            lhs = self.parse_expr(expr)
-        else:
-            lhs = Variables.variables[lhs]
-        if type(lhs) != str:
-            rhs = self.parse_expr(expr)
-        else:
-            rhs = Variables.variables[rhs]
-        return f'{lhs} {op} {rhs}'
-
-    def return_(self, expr):
-        expr = self.parse_expr(expr)
-        self.heap.append(Codes.move('eax', expr))
-
-    def get_after_return(self, var):
-        var = Variables.variables[var]
-        self.heap.append(Codes.move(var, 'eax'))
-
-    def comb(self, args):
-        x = []
-        for arg in args:
-            print(arg)
-            if type(arg) != tuple:
-                var = False
-                argx = arg
-            else:
-                argx, var = arg
-                argx = Variables.variables[argx]
-            x.append(argx if not var else f'addr {argx}')
-        return ",".join(x)
+    def endif(self):
+        self.set_cur(self.if_ret)
+        self.if_ret = None
+        self.prev = None
 
     def call(self, name, args):
-        name = Variables.variables[name] if name in Variables.variables else name
-        args = self.comb(args)
-        self.heap.append(Codes.invoke(name, args))
-
-    def function(self, name, args):
-        self.in_func = True
-        name = Variables.assign(name, True)
-        self.last_func = name
-        p = Codes.define_function(name, len(args))
-        x = []
-        for i in args:
-            x.append(Variables.assign(i))
-        q = Codes.declare_function(name, x)
-        self.head.append(p)
-        self.heap.append(q)
-        self.heap_dump()
-
-    def close_function(self, name=None):
-        self.heap_dump()
-        if name is None:
-            name = self.last_func
-        else:
-            name = Variables.variables[name]
-        self.heap.append(Codes.end_func(name))
-        self.in_func = False
+        argx = []
+        for arg in args:
+            if type(arg) == int:
+                argx.append(arg)
+        self.cur.append(Codes.invoke(name, " ".join(args)))
 
     def var_assign(self, name, value):
         name = Variables.assign(name)
-        self.data.append(Codes.var_assign(name, value))
-        if Variables.emg:
-            self.heap.append(Codes.var_clear(Variables.emg))
-
-    def heap_dump(self):
-        #if self.in_func:
-        #    self.code = self.heap + self.code
-        #else:
-        self.code = self.code + self.heap
-        self.heap = []
-
-    def add_exit(self):
-        self.heap.append(Codes.invoke("Exit", "0"))
-        self.import_('stdlib')
+        if type(value) == int or value.isnumeric():
+            ext = 'dword'
+        else:
+            ext = 'db'
+        self.data.append(f'{name} {ext} {value}')
 
     def dump(self):
-        self.add_exit()
-        self.heap_dump()
-        self.code = [".code"] + self.code
-        self.code.append(Codes.start_end())
-        data = "\n".join(self.data)
-        code = "\n".join(self.code)
-        head = "\n".join(self.head)
-        return f'{head}\n{data}\n{code}'
+        code = ['.code']
+        start = ['start:'] + self.segments.pop('start')
+        for segment in self.segments.keys():
+            value = self.segments[segment]
+            value = [f'{segment}:'] + value + ['ret']
+            code = code + value
+        full = self.head + self.data + code + start
+        full = "\n".join(full)
+        return full
+
+
+def compiler_warning(message):
+    print(f'COMPILER WARNING : {message}')
+
+
+def main():
+    cg = Codegen()
+    cg.import_('stdlib')
+    cg.var_assign('a', 10)
+    cg.var_assign('b', 10)
+    cg.if_(('a', '==', 'b'))
+    cg.call('Print', ['a == b'])
+    cg.closeif()
+    cg.else_if()
+    cg.call('Print', ['a != b'])
+    cg.closeif()
+    cg.endif()
+    cg.call('print', ['DONE'])
+    print(cg.dump())
+
+
+if __name__ == '__main__':
+    main()
