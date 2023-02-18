@@ -7,18 +7,35 @@ class Variables:
     emg = None
     c = 0
     c2 = -1
+    c3 = -1
+
+    @staticmethod
+    def exists_reg(item):
+        return item in Variables.variables_name
+
+    @staticmethod
+    def get_as_obj(item):
+        return Variable(item, Variables.variables[item], False)
+
+    @staticmethod
+    def new():
+        Variables.c3 += 1
+        return f'__sys{Variables.c3}__'
 
     @staticmethod
     def define_var(name, value):
         Variables.variables[name] = value
 
     @staticmethod
-    def assign(name, func=False):
+    def assign(name, uninit=False, func=False):
         if name in Variables.variables_name.keys():
             Variables.emg = Variables.variables_name[name]
         else:
             Variables.emg = None
-        Variables.variables_name[name] = f'{"F" if func else "v"}{Variables.c}'
+        if not uninit:
+            Variables.variables_name[name] = f'{"F" if func else "v"}{Variables.c}'
+        else:
+            Variables.variables_name[name] = f'u{Variables.c}'
         Variables.c += 1
         return Variables.variables_name[name]
 
@@ -33,11 +50,13 @@ class IV_Types:
     int_ = 'int'
     float_ = 'float'
     bool_ = 'bool'
+    null = 'null'
     find = {
-        'string': string,
+        'str': string,
         'int': int_,
         'float': float_,
         'bool': bool_,
+        'null': null,
     }
 
 
@@ -46,11 +65,13 @@ class Def_Types:
     int_ = 'db'
     float_ = 'db'
     bool_ = 'db'
+    null = 'db'
     find = {
-        'string': string,
+        'str': string,
         'int': int_,
         'float': float_,
         'bool': bool_,
+        'null': null,
     }
 
 
@@ -63,8 +84,13 @@ class Value:
     def __repr__(self):
         return f'{self.type} : {self.value}'
 
-    def reprsentation(self, dst=False):
+    def representation(self, dst=False):
         return f'{self.value}'
+
+
+class Null(Value):
+    def __init__(self):
+        super().__init__(IV_Types.null, 'NULL')
 
 
 class Register(Value):
@@ -72,7 +98,7 @@ class Register(Value):
         super(Register, self).__init__('reg', value)
 
     def __str__(self):
-        return self.reprsentation(None)
+        return self.representation(None)
 
 
 def float_to_hex(f):
@@ -86,18 +112,25 @@ class Registers:
 
 
 class Variable(Value):
-    def __init__(self, name, value):
+    def __init__(self, name, value, eng=True):
         self.iv_value = value
         self.name = name
-        super(Variable, self).__init__(self.iv_value.type, self.iv_value.value)
         self.dst_ava = True
-        self.cover = Variables.assign(self.name)
-        Variables.define_var(self.cover, self.iv_value)
+        self.uninit = value is None
+        if self.uninit:
+            self.iv_value = Null()
+        if eng:
+            self.cover = Variables.assign(self.name, self.uninit)
+            Variables.define_var(self.cover, self.iv_value if not self.uninit else Null())
+        else:
+            self.cover = self.name
+
+        super(Variable, self).__init__(self.iv_value.type, self.iv_value.value)
 
     def __repr__(self):
         return f'{self.name} = {self.type} : {self.value}'
 
-    def reprsentation(self, dst=False):
+    def representation(self, dst=False):
         return f'[{self.cover}]' if dst else f'{self.cover}'
 
 
@@ -115,7 +148,7 @@ class Float(Value):
     def __init__(self, value):
         super(Float, self).__init__(IV_Types.float_, value)
 
-    def reprsentation(self, dst=False):
+    def representation(self, dst=False):
         return f'{float_to_hex(self.value)}'
 
 
@@ -128,10 +161,12 @@ class Expression(Value):
         self.type = self.node1.type
         self.value = self.node1.value
 
+        self.dst_ava = self.node1.dst_ava
+
         base.bin_op(self.op, self.node1, self.node2)
 
-    def reprsentation(self, dst=False):
-        return self.value
+    def representation(self, dst=False):
+        return self.node1.representation(dst)
 
 
 class RegOps:
