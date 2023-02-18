@@ -6,6 +6,8 @@ colora.Style.UNDERLINE = "\033[4m"
 alerts = False
 contentLoader = None
 contentFile = None
+contentOut = None
+TrueFile = None
 errorDict = {
     1: "NameError",
     2: "ValueError",

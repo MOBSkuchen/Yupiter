@@ -3,21 +3,24 @@ import sys
 import colorama as colora
 from errors import F_error as error
 import errors as xsErrors
-from compiler import PLexer, PParser, Compiler
+from compiler import Compiler
+from interpreter import Interpreter
+from lp import PLexer, PParser
 from syntax_higlighting import light
-
 
 long_opts = {
     "--noalert": 'noalert',
     "--x32": "32bit",
     "--alert": "alert",
-    "--view": "view"
+    "--view": "view",
+    "--compile": "compile"
 }
 short_opts = {
     "-n": "--noalert",
     "-x": "--x32",
     "-a": "--alert",
-    "-v": "--view"
+    "-v": "--view",
+    "-c": "--compile"
 }
 
 
@@ -37,9 +40,9 @@ def read(target):
     with open(target, 'r') as file:
         content = file.read()
     xsErrors.contentLoader = content
-    xsErrors.contentFile   = fmt_file(target)
-    xsErrors.TrueFile      = target
-    xsErrors.contentOut    = xsErrors.TrueFile[:len(xsErrors.TrueFile) - 3] + '.asm'
+    xsErrors.contentFile = fmt_file(target)
+    xsErrors.TrueFile = target
+    xsErrors.contentOut = xsErrors.TrueFile[:len(xsErrors.TrueFile) - 3] + '.asm'
     return content
 
 
@@ -55,14 +58,39 @@ def fmt_file(file):
     return file.split('/')[0] + '/.../' + file.split('/')[file.count('/')]
 
 
-def start(opts, content):
+def lp(content):
     lexer = PLexer()
     tokens = lexer.tokenize(content)
     parser = PParser()
     parser.parse(tokens)
+    return parser.ast
+
+
+def compile_(opts, ast):
+    print(
+        f'{colora.Fore.LIGHTYELLOW_EX}Compiling {colora.Fore.RESET}{colora.Fore.BLUE}{colora.Style.BRIGHT}{xsErrors.contentFile}'
+        f'{colora.Style.RESET_ALL}{colora.Fore.LIGHTYELLOW_EX} to{colora.Fore.BLUE}{colora.Style.BRIGHT} '
+        f'{fmt_file(xsErrors.contentOut)}{colora.Style.RESET_ALL}'
+        f'{colora.Fore.LIGHTYELLOW_EX} with options{colora.Fore.RESET}: '
+        f'{colora.Fore.MAGENTA}{f"{colora.Fore.RESET}, {colora.Fore.MAGENTA}".join(opts)}')
+    print()
+    sys.stdout.write(colora.Style.RESET_ALL)
     compiler = Compiler(opts)
-    out = compiler.make(parser.ast)
+    out = compiler.make(ast)
     write(xsErrors.contentOut, out)
+
+
+def run(opts, ast):
+    print(
+        f'{colora.Fore.LIGHTYELLOW_EX}Running {colora.Fore.RESET}{colora.Fore.BLUE}{colora.Style.BRIGHT}{xsErrors.contentFile}'
+        f'{colora.Style.RESET_ALL}{colora.Fore.LIGHTYELLOW_EX} to{colora.Fore.BLUE}{colora.Style.BRIGHT} '
+        f'{fmt_file(xsErrors.contentOut)}{colora.Style.RESET_ALL}'
+        f'{colora.Fore.LIGHTYELLOW_EX} with options{colora.Fore.RESET}: '
+        f'{colora.Fore.MAGENTA}{f"{colora.Fore.RESET}, {colora.Fore.MAGENTA}".join(opts)}')
+    print()
+    sys.stdout.write(colora.Style.RESET_ALL)
+    interpreter = Interpreter(opts)
+    out = interpreter.make(ast)
 
 
 def main():
@@ -85,13 +113,16 @@ def main():
     v = read(target)
     target = xsErrors.contentFile
     if "view" in opts:
-        print(f'{colora.Fore.LIGHTYELLOW_EX}Viewing {colora.Fore.RESET}{colora.Fore.BLUE}{colora.Style.BRIGHT}{target}{colora.Style.RESET_ALL}:')
+        print(
+            f'{colora.Fore.LIGHTYELLOW_EX}Viewing {colora.Fore.RESET}{colora.Fore.BLUE}{colora.Style.BRIGHT}{target}'
+            f'{colora.Style.RESET_ALL}:')
         print(light(v))
         print()
-    print(f'{colora.Fore.LIGHTYELLOW_EX}Compiling {colora.Fore.RESET}{colora.Fore.BLUE}{colora.Style.BRIGHT}{target}{colora.Style.RESET_ALL}{colora.Fore.LIGHTYELLOW_EX} to{colora.Fore.BLUE}{colora.Style.BRIGHT} {fmt_file(xsErrors.contentOut)}{colora.Style.RESET_ALL}{colora.Fore.LIGHTYELLOW_EX} with options{colora.Fore.RESET}: {colora.Fore.MAGENTA}{f"{colora.Fore.RESET}, {colora.Fore.MAGENTA}".join(opts)}')
-    print()
-    sys.stdout.write(colora.Style.RESET_ALL)
-    start(opts, v)
+    ast = lp(v)
+    if "compile" in ast:
+        compile_(opts, ast)
+    else:
+        run(opts, ast)
 
 
 if __name__ == '__main__':

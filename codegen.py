@@ -24,6 +24,7 @@ class Codegen:
         self.head = []
         self.opts = opts
         self.configure()
+        self.sg_mem = []
         self.cur = None
         self.prev = None
         self.heap_name = None
@@ -51,9 +52,6 @@ class Codegen:
         self.cur: list = self.segments[name]
         self.heap_name = name
 
-    def gen_label_name(self):
-        return f'SEG{len(self.segments)}'
-
     def __add__(self, other):
         self.cur.append(other)
 
@@ -68,6 +66,15 @@ class Codegen:
                 continue
             self.cur.append(RegOps.push(param.representation()))
         self.func_segments[name] = self.auto_segment()
+
+    def run_function(self, name):
+        if name not in self.func_segments:
+            return 10
+
+        name = self.func_segments[name]
+
+        self.cur.append(RegOps.jump(name))
+        self.set_cur(name)
 
     # Shift value of node1 into node2
     def shift(self, node1, node2):
@@ -107,6 +114,7 @@ class Codegen:
         self.new_segment('end')
         self.cur.append(RegOps.popall())
         self.bin_op('xor', Registers.op1, Registers.op1, True, True)
+        self.cur.append('ret')
 
     def translate_expr_2_cmp(self, node1: Value, node2: Value):
         self.cur.append(RegOps.mov(Registers.op1, node1.representation()))
@@ -114,9 +122,8 @@ class Codegen:
         self.cur.append(f'cmp {Registers.op1}, {Registers.op2}')
 
     def if_start(self, op):
-        name = self.gen_label_name()
+        name = self.auto_segment(False)
         self.cur.append(RegOps.jump(name, op))
-        self.new_segment(name)
 
     def out_if(self):
         self.set_cur(self.heap_name)
@@ -130,12 +137,10 @@ class Codegen:
         code = self.code + [""]
         start = self.segments.pop(f'{START_FUNC}')
         start[0] = "   " + start[0]
-        start.append('ret')
         start = [f'{START_FUNC}:'] + ["\n   ".join(start)]
         for segment in self.segments.keys():
             value = self.segments[segment]
             value[0] = "   " + value[0]
-            value.append('ret')
             value = "\n   ".join(value)
             value = [f'{segment}:'] + [value]
             value.append('')
