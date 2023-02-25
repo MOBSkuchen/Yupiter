@@ -253,6 +253,10 @@ def translate_color(x):
             return colora.Style.BRIGHT
         case "orange":
             return fg.LIGHTMAGENTA_EX
+        case "magenta":
+            return fg.MAGENTA
+        case _:
+            return ""
 
 
 def readfile(filename):
@@ -268,6 +272,10 @@ def tokenize(content, dictionary):
     colgroups = dict(dictionary["colgroups"])
     lexer = PLexer()
     lexer.tokenize(content)
+    if "BACKGROUND" in tokens_:
+        bg = colgroups[tokens_["BACKGROUND"]]
+    else:
+        bg = ""
     for token in lexer.toks:
         v = False
         if token.type == 'EMPTY':
@@ -281,7 +289,7 @@ def tokenize(content, dictionary):
         else:
             co = colgroups["0"]
         c = token.value
-        full = f'{colora.Style.RESET_ALL}{translate_color(co)}{c}{colora.Style.RESET_ALL}'
+        full = f'{colora.Style.RESET_ALL}{translate_color(bg)}{translate_color(co)}{c}{colora.Style.RESET_ALL}'
         if v:
             full = f'{colora.Style.RESET_ALL}{translate_color(co)}{c}'
         if c == "\n":
@@ -292,7 +300,7 @@ def tokenize(content, dictionary):
     return "\n".join(s)
 
 
-def light(c):
-    v = json.loads(readfile('syntax.json'))
+def light(c, file):
+    v = json.loads(readfile(file))
     x = tokenize(c, v)
     return x

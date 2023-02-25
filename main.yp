@@ -1,6 +1,0 @@
-def x()
-    x = 10 + 10
-    return x
-;
-b = 20
-c = x()

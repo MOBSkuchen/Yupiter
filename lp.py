@@ -164,7 +164,7 @@ class PLexer(Lexer):
         pass
 
     def error(self, t):
-        xsErrors.stderr(3, (t.index, t.index), t.lineno, f'Illegal character "{t.value[0]}"')
+        xsErrors.stderr(3, (t.index, t.index), t.lineno, f'Illegal character "{t.org_val[0]}"')
 
 
 class MutedLogger(object):

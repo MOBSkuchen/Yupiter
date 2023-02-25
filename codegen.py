@@ -1,4 +1,4 @@
-from asm_writer import RegOps, Null, Int, Value, Variable, Def_Types, Variables, Registers, Expression, Register
+from utils import RegOps, Null, Int, Value, Variable, Def_Types, Variables, Registers, Expression, Register
 import errors as xsErrors
 
 START_FUNC = 'CMAIN'

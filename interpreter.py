@@ -1,3 +1,6 @@
+import errors as xsErrors
+
+
 def compute_expression(op, n1, n2):
     match op:
         case "+":
@@ -43,13 +46,17 @@ class Interpreter:
             return value
 
         elif branch[0] == 'Name':
-            name = [branch[1]['value']]
+            name = branch[1]['value']
+            if name not in self.variables:
+                xsErrors.stderr(1, (branch[2][0], branch[2][0]), branch[2][1], f"The name '{name}' was not found", 1)
             return self.variables[name]
 
         elif branch[0] == 'Expression':
-            op, n1, n2 = self.visit_expression(branch)
+            op, n1, n2 = branch[1]["op"], branch[1]["lhs"], branch[1]["rhs"]
             return compute_expression(op, n1, n2)
 
         elif branch[0] == 'String':
             value = str(branch[1]['value'])
             return value
+
+    

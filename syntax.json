@@ -9,9 +9,11 @@
     "6": "grey",
     "7": "green",
     "8": "dim",
-    "9": "b:grey"
+    "9": "",
+    "10": ""
   },
   "tokens": {
+        "BACKGROUND": "10",
         "COMMENT": "6",
         "NAME": "8",
         "INDENT": "9",

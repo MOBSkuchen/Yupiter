@@ -1,6 +1,6 @@
 import os.path
 from codegen import Codegen
-from asm_writer import RegOps, Int, Value, Variable, Def_Types, Variables, Registers, Expression, Float, String
+from utils import RegOps, Int, Value, Variable, Def_Types, Variables, Registers, Expression, Float, String
 import errors as xsErrors
 
 

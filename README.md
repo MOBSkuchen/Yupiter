@@ -26,10 +26,10 @@ age =  age + 3  # Increase the age, lol
 
 First comes the name, then an EQ operator and lastly the value.
 Operations can only be made between the same types.
-Type-definitions are not neccessary.
+Type-definitions are not necessary.
 By the way: Comments are created with hashtags.
 
 
 # Compiler options
 
-- ``-v`` / ``-view`` : Views the input file with syntax highlihting
+- ``-v`` / ``--view`` : Views the input file with syntax highlihting
